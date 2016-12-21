@@ -16,12 +16,15 @@ def declare_graph(num_steps, batch_size, state_size=2048, learning_rate=0.1, num
 
     x = tf.placeholder(tf.float32, [batch_size, num_steps, num_inputs_per_step], name='input_placeholder')  # 20x10
     y = tf.placeholder(tf.float32, [batch_size, num_steps, num_inputs_per_step], name='labels_placeholder')
-    init_state = tf.zeros([batch_size, state_size])
 
     # rnn_inputs is a list of num_steps tensors with shape [batch_size, num_inputs_per_step]
     rnn_inputs = tf.unpack(x, axis=1)
 
-    cell = tf.nn.rnn_cell.BasicRNNCell(state_size)
+    num_layers = 3
+
+    cell = tf.nn.rnn_cell.LSTMCell(state_size, state_is_tuple=True)
+    cell = tf.nn.rnn_cell.MultiRNNCell([cell] * num_layers, state_is_tuple=True)
+    init_state = cell.zero_state(batch_size, tf.float32)
     rnn_outputs, final_state = tf.nn.rnn(cell, rnn_inputs, initial_state=init_state)
 
     # logits and predictions
