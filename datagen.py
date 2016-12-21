@@ -80,11 +80,11 @@ def get_freq_blocks_from_vector(vector):
     return ret
 
 
-input = get_training_input()
-print(len(input))
-freq_blocks = [get_freq_blocks_from_vector(vec) for vec in input]
-time = convert_freq_blocks_to_time(freq_blocks)
-write_arr_to_wav(time, "test.wav", 16000)
-
-x = get_training_output()
-print(len(x))
+# input = get_training_input()
+# print(len(input))
+# freq_blocks = [get_freq_blocks_from_vector(vec) for vec in input]
+# time = convert_freq_blocks_to_time(freq_blocks)
+# write_arr_to_wav(time, "test.wav", 16000)
+#
+# x = get_training_output()
+# print(len(x))

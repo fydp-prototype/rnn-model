@@ -1,9 +1,8 @@
 import numpy as np
 import tensorflow as tf
-from datagen import get_training_input, get_training_output
+from datagen import *
 
-
-# num_classes = 130  # 64 + 1 frequencies between 0 and 16000/2 stepped by 128, times 2 for real and imag values
+num_classes = 130  # 64 + 1 frequencies between 0 and 16000/2 stepped by 128, times 2 for real and imag values
 
 
 def reset_graph():
@@ -12,7 +11,7 @@ def reset_graph():
     tf.reset_default_graph()
 
 
-def declare_graph(num_steps, batch_size, state_size=32, learning_rate=0.1, num_inputs_per_step=130):
+def declare_graph(num_steps, batch_size, state_size=2048, learning_rate=0.1, num_inputs_per_step=num_classes):
     reset_graph()
 
     x = tf.placeholder(tf.float32, [batch_size, num_steps, num_inputs_per_step], name='input_placeholder')  # 20x10
@@ -33,16 +32,12 @@ def declare_graph(num_steps, batch_size, state_size=32, learning_rate=0.1, num_i
     # predictions = [tf.nn.softmax(logit) for logit in logits]
     # predictions = [logit for logit in logits]
     predictions = logits
-    # print(tf.shape(predictions))
-
 
     # Turn our y placeholder into a list labels
     # y_as_list = [tf.squeeze(i) for i in tf.split(1, num_steps, y)]
-    # print(tf.shape(y_as_list))
 
     # loss_weights = [tf.ones([batch_size]) for _ in range(num_steps)]
     # losses = tf.nn.seq2seq.sequence_loss_by_example(logits, y_as_list, loss_weights)
-    print(tf.shape(y))
     losses = [tf.reduce_mean(tf.square(predictions[i] - y[:, i])) for i in xrange(len(predictions))]
 
     total_loss = tf.reduce_mean(losses)
@@ -63,24 +58,20 @@ def declare_graph(num_steps, batch_size, state_size=32, learning_rate=0.1, num_i
 # adapted from https://github.com/tensorflow/tensorflow/blob/master/tensorflow/models/rnn/ptb/reader.py
 def gen_batch(raw_x, raw_y, batch_size, num_steps):
     data_length = len(raw_x)  # 1026
-    print(type(raw_x))
 
     # partition raw data into batches and stack them vertically in a data matrix
     batch_partition_length = data_length // batch_size
-    data_x = np.zeros([batch_size, batch_partition_length], dtype=np.ndarray)
-    data_y = np.zeros([batch_size, batch_partition_length], dtype=np.ndarray)
+    data_x = np.zeros([batch_size, batch_partition_length, num_classes], dtype=np.float32)
+    data_y = np.zeros([batch_size, batch_partition_length, num_classes], dtype=np.float32)
     for i in range(batch_size):
         data_x[i] = raw_x[batch_partition_length * i:batch_partition_length * (i + 1)]
         data_y[i] = raw_y[batch_partition_length * i:batch_partition_length * (i + 1)]
-        print(type(data_x))
     # further divide batch partitions into num_steps for truncated backprop
     epoch_size = batch_partition_length // num_steps
 
     for i in range(epoch_size):
         x = data_x[:, i * num_steps:(i + 1) * num_steps]
         y = data_y[:, i * num_steps:(i + 1) * num_steps]
-        print(type(x))
-        print(type(y))
         yield (x, y)
 
 
@@ -98,9 +89,9 @@ def train_network(g, num_epochs, num_steps, batch_size, verbose=True, save=False
             training_state = None
             for step, (X, Y) in enumerate(epoch):
                 if training_state is not None:
-                    feed_dict = {g['x']: X, g['y']: np.zeros((20,10,130)), g['init_state']: training_state}
+                    feed_dict = {g['x']: X, g['y']: Y, g['init_state']: training_state}
                 else:
-                    feed_dict = {g['x']: np.zeros((20,10,130)), g['y']: np.zeros((20,10,130))}
+                    feed_dict = {g['x']: X, g['y']: Y}
 
                 training_loss, training_state, _ = sess.run([g['total_loss'],
                                                              g['final_state'],
@@ -127,13 +118,12 @@ def decode_output(ans):
     return output
 
 
-def generate_test_output(g):
+def generate_test_output(g, test_input):
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         g['saver'].restore(sess, "/tmp/model-rnn-audio.ckpt")
 
         state = None
-        test_input = get_training_input()
         ans = []
 
         for block_index in range(len(test_input)):
@@ -150,8 +140,10 @@ def generate_test_output(g):
 
 
 def train():
-    graph = declare_graph(num_steps=10, batch_size=20)
-    training_losses = train_network(graph, 10, num_steps=10, batch_size=20, save=True)
+    batch_size = 100
+    num_steps = 10
+    graph = declare_graph(num_steps=num_steps, batch_size=batch_size)
+    training_losses = train_network(graph, num_epochs=100, num_steps=num_steps, batch_size=batch_size, save=True)
     import matplotlib.pyplot as plt
     plt.plot(training_losses)
     plt.show()
@@ -160,14 +152,15 @@ def train():
 def test():
     graph = declare_graph(num_steps=1, batch_size=1)
 
-    # for x in range(200, 400):
-    #     for y in range(200, 400):
-    #         ans = generate_test_output(graph, x, y, 10)
-    #         sum = decode_output(ans)
-    #         print(str(x) + " + " + str(y) + " = " + str(sum))
-    #         print(ans)
-    #         assert (sum == x + y)
+    ans = generate_test_output(graph, get_training_input())
+
+    freq_blocks = [get_freq_blocks_from_vector(vec) for vec in ans]
+    time = convert_freq_blocks_to_time(freq_blocks)
+    import matplotlib.pyplot as plt
+    plt.plot(time)
+    plt.show()
+    write_arr_to_wav(time, "rnn-output.wav", 16000)
 
 
 train()
-# test()
+test()
